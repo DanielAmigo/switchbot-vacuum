@@ -615,6 +615,22 @@ class SwitchBotS10Coordinator(DataUpdateCoordinator):
         map_info = props.get(PROP_MAP_INFO)
         bucket = props.get(PROP_S3_BUCKET, "prod-eu-sweeper-origin")
 
+        # If credentials are missing or expired, attempt to wake the robot to obtain fresh S3 tokens
+        if not creds or not isinstance(creds, dict) or creds.get("expiration", 0) < time.time():
+            _LOGGER.info("AWS credentials expired or missing, waking robot to refresh")
+            try:
+                await self.async_send_command(CMD_CONTROL, {"0": "pause"})
+                import asyncio
+                await asyncio.sleep(10)
+                props = await self.async_get_properties(
+                    [PROP_MAP_INFO, PROP_AWS_CREDS, PROP_S3_BUCKET, PROP_ROOM_PLANS]
+                )
+                creds = props.get(PROP_AWS_CREDS)
+                map_info = props.get(PROP_MAP_INFO)
+                bucket = props.get(PROP_S3_BUCKET, bucket)
+            except Exception as exc:
+                _LOGGER.warning("Failed to wake robot for AWS credentials: %s", exc)
+
         # Try downloading map from S3 if credentials are available and valid
         zip_bytes: bytes | None = None
         if creds and isinstance(creds, dict) and creds.get("expiration", 0) >= time.time():
