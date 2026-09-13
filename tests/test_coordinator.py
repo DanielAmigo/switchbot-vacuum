@@ -202,3 +202,117 @@ class TestSendCommand:
                 }},
             )
             assert result["resultCode"] == 100
+
+
+class TestMapParsing:
+    """Test map zip parsing, coordinate transformation, and geometry algorithms."""
+
+    def test_simplify_polygon_collinear(self):
+        """Test removing redundant collinear vertices along straight lines."""
+        # A rectangle with intermediate collinear points on each side
+        points = [
+            [0, 0], [5, 0], [10, 0],
+            [10, 5], [10, 10],
+            [5, 10], [0, 10],
+            [0, 5]
+        ]
+        simplified = SwitchBotS10Coordinator._simplify_polygon(points)
+        assert simplified == [[0, 0], [10, 0], [10, 10], [0, 10]]
+
+    def test_calculate_centroid(self):
+        """Test calculating centroid of a polygon."""
+        points = [[0, 0], [10, 0], [10, 10], [0, 10]]
+        cx, cy = SwitchBotS10Coordinator._calculate_centroid(points)
+        assert cx == 5.0
+        assert cy == 5.0
+
+    def test_get_room_icon(self):
+        """Test assigning MDI icon based on room name keywords."""
+        assert SwitchBotS10Coordinator._get_room_icon("Living room") == "mdi:sofa"
+        assert SwitchBotS10Coordinator._get_room_icon("Salón principal") == "mdi:sofa"
+        assert SwitchBotS10Coordinator._get_room_icon("Cocina") == "mdi:silverware-fork-knife"
+        assert SwitchBotS10Coordinator._get_room_icon("Dormitorio") == "mdi:bed"
+        assert SwitchBotS10Coordinator._get_room_icon("Baño") == "mdi:shower"
+        assert SwitchBotS10Coordinator._get_room_icon("Pasillo") == "mdi:hallway"
+        assert SwitchBotS10Coordinator._get_room_icon("Despacho") == "mdi:desk"
+        assert SwitchBotS10Coordinator._get_room_icon("Terraza") == "mdi:balcony"
+        assert SwitchBotS10Coordinator._get_room_icon("Lavadero") == "mdi:washing-machine"
+        assert SwitchBotS10Coordinator._get_room_icon("Habitación invitados") == "mdi:bed"
+        assert SwitchBotS10Coordinator._get_room_icon("Unknown Room") == "mdi:floor-plan"
+
+    def test_options_persistence_on_init(self, mock_hass):
+        """Test that rooms, map_rooms, and map_size are restored from entry.options."""
+        entry = MagicMock()
+        entry.data = {"username": "test@test.com", "password": "pw", "device_mac": "AABB"}
+        entry.options = {
+            "rooms": {"ROOM_001": "Living room"},
+            "map_rooms": {
+                "ROOM_001": {
+                    "name": "Living room",
+                    "outline": [[0, 0], [10, 0], [10, 10], [0, 10]],
+                    "x": 5.0,
+                    "y": 5.0,
+                    "icon": "mdi:sofa",
+                }
+            },
+            "map_size": [231, 340],
+        }
+        coordinator = SwitchBotS10Coordinator(mock_hass, entry)
+        assert coordinator.rooms == {"ROOM_001": "Living room"}
+        assert "ROOM_001" in coordinator.map_rooms
+        assert coordinator.map_size == (231, 340)
+
+    def test_parse_map_zip(self, mock_hass, mock_entry):
+        """Test full map zip parsing with PGM, map.json, and labels.json."""
+        import io
+        import zipfile
+
+        # Create synthetic P5 PGM (10x10)
+        pgm_bytes = b"P5\n10 10\n255\n" + b"\x80" * 100
+        map_json = json.dumps({
+            "resolution": 0.05,
+            "origin": [-2.0, -10.0, 0.0]
+        }).encode("utf-8")
+        labels_json = json.dumps({
+            "data": [
+                {
+                    "id": "ROOM_001",
+                    "name": "Living room",
+                    "geometry": [
+                        [-2.0, -10.0],
+                        [-1.0, -10.0],
+                        [-1.0, -9.0],
+                        [-2.0, -9.0]
+                    ]
+                }
+            ]
+        }).encode("utf-8")
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("refined/map.pgm", pgm_bytes)
+            zf.writestr("map.json", map_json)
+            zf.writestr("labels.json", labels_json)
+        zip_bytes = buf.getvalue()
+
+        coordinator = SwitchBotS10Coordinator(mock_hass, mock_entry)
+        map_png, map_rooms, map_size, rooms = coordinator._parse_map_zip(zip_bytes)
+
+        # Map size
+        assert map_size == (10, 10)
+        # Rooms
+        assert rooms == {"ROOM_001": "Living room"}
+        assert "ROOM_001" in map_rooms
+        room = map_rooms["ROOM_001"]
+        assert room["name"] == "Living room"
+        assert room["icon"] == "mdi:sofa"
+
+        # Coordinate transformation check:
+        # mx = -2.0, origin_x = -2.0 -> px = round((-2.0 - (-2.0)) / 0.05) = 0
+        # my = -10.0, origin_y = -10.0, height = 10 -> py = round(10 - (-10.0 - (-10.0)) / 0.05) = 10
+        # mx = -1.0 -> px = round((-1.0 - (-2.0)) / 0.05) = 20
+        # my = -9.0 -> py = round(10 - (-9.0 - (-10.0)) / 0.05) = round(10 - 20) = -10
+        expected_outline = [[0, 10], [20, 10], [20, -10], [0, -10]]
+        assert room["outline"] == expected_outline
+        assert room["x"] == 10.0
+        assert room["y"] == 0.0
