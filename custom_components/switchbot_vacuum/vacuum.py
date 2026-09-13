@@ -168,10 +168,6 @@ class SwitchBotS10Vacuum(CoordinatorEntity[SwitchBotS10Coordinator], StateVacuum
             _LOGGER.debug("Unknown work_status=%s for %s", status, self.coordinator.device_mac)
         return activity
 
-    @property
-    def battery_level(self) -> int | None:
-        """Return battery level."""
-        return self.coordinator.data.get("battery")
 
     @property
     def fan_speed(self) -> str | None:

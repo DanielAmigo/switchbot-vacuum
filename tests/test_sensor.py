@@ -5,7 +5,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from custom_components.switchbot_vacuum.sensor import SwitchBotRoomSensor
+from custom_components.switchbot_vacuum.sensor import (
+    SwitchBotRoomSensor,
+    SwitchBotVacuumBatterySensor,
+)
 
 
 @pytest.fixture
@@ -53,3 +56,19 @@ class TestRoomSensor:
         """Test sensor icon."""
         sensor = SwitchBotRoomSensor(mock_coordinator, "ROOM_001", "Table")
         assert sensor.icon == "mdi:floor-plan"
+
+
+class TestBatterySensor:
+    """Test battery sensor entity."""
+
+    def test_battery_value(self, mock_coordinator):
+        """Test battery value reads from coordinator data."""
+        mock_coordinator.data["battery"] = 85
+        sensor = SwitchBotVacuumBatterySensor(mock_coordinator)
+        assert sensor.native_value == 85
+
+    def test_battery_unique_id(self, mock_coordinator):
+        """Test unique_id includes device mac and battery."""
+        sensor = SwitchBotVacuumBatterySensor(mock_coordinator)
+        assert sensor.unique_id == "AABBCCDDEEFF_battery"
+
