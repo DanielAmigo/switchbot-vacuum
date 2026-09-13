@@ -138,7 +138,6 @@ class SwitchBotS10Vacuum(CoordinatorEntity[SwitchBotS10Coordinator], StateVacuum
         | VacuumEntityFeature.RETURN_HOME
         | VacuumEntityFeature.FAN_SPEED
         | VacuumEntityFeature.SEND_COMMAND
-        | VacuumEntityFeature.BATTERY
     )
     def __init__(self, coordinator: SwitchBotS10Coordinator) -> None:
         """Initialize."""
