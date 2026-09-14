@@ -141,6 +141,18 @@ async def async_setup_entry(
     )
 
     platform.async_register_entity_service(
+        "cycle_clean_mode",
+        {},
+        "async_cycle_clean_mode",
+    )
+
+    platform.async_register_entity_service(
+        "cycle_water_level",
+        {},
+        "async_cycle_water_level",
+    )
+
+    platform.async_register_entity_service(
         "force_refresh",
         {},
         "async_force_refresh",
@@ -226,6 +238,12 @@ class SwitchBotS10Vacuum(CoordinatorEntity[SwitchBotS10Coordinator], StateVacuum
         new_data["work_status"] = work_status
         self.coordinator.async_set_updated_data(new_data)
 
+    def _optimistic_clean_mode_update(self, clean_mode: dict[str, Any]) -> None:
+        """Immediately update clean_mode in coordinator data and notify listeners."""
+        new_data = dict(self.coordinator.data)
+        new_data["clean_mode"] = dict(clean_mode)
+        self.coordinator.async_set_updated_data(new_data)
+
     async def async_start(self) -> None:
         """Start cleaning."""
         if self._is_k10 or self._is_k10_pro:
@@ -288,12 +306,23 @@ class SwitchBotS10Vacuum(CoordinatorEntity[SwitchBotS10Coordinator], StateVacuum
             mode = self.coordinator.data.get("clean_mode", {})
             if not isinstance(mode, dict):
                 mode = {}
+            current_type = mode.get("type", "sweep_mop")
+            if current_type == "mop":
+                current_type = "sweep_mop"
+            updated = dict(mode)
+            updated["fan_level"] = level
+            updated["type"] = current_type
+            if "water_level" not in updated:
+                updated["water_level"] = 1
+            if "times" not in updated:
+                updated["times"] = 1
+            self._optimistic_clean_mode_update(updated)
             await self.coordinator.async_send_command(CMD_CHANGE_MODE, {
                 "0": {
                     "fan_level": level,
-                    "times": mode.get("times", 1),
-                    "type": mode.get("type", "sweep_mop"),
-                    "water_level": mode.get("water_level", 1),
+                    "times": updated.get("times", 1),
+                    "type": current_type,
+                    "water_level": updated.get("water_level", 1),
                 },
             })
         await self.coordinator.async_request_refresh()
@@ -305,32 +334,70 @@ class SwitchBotS10Vacuum(CoordinatorEntity[SwitchBotS10Coordinator], StateVacuum
         clean_mode = self.coordinator.data.get("clean_mode", {})
         if not isinstance(clean_mode, dict):
             clean_mode = {}
+        updated = dict(clean_mode)
+        updated["type"] = mode
+        if "fan_level" not in updated:
+            updated["fan_level"] = 1
+        if "water_level" not in updated:
+            updated["water_level"] = 1
+        if "times" not in updated:
+            updated["times"] = 1
+        self._optimistic_clean_mode_update(updated)
         await self.coordinator.async_send_command(CMD_CHANGE_MODE, {
             "0": {
-                "fan_level": clean_mode.get("fan_level", 1),
-                "times": clean_mode.get("times", 1),
+                "fan_level": updated.get("fan_level", 1),
+                "times": updated.get("times", 1),
                 "type": mode,
-                "water_level": clean_mode.get("water_level", 1),
+                "water_level": updated.get("water_level", 1),
             },
         })
         await self.coordinator.async_request_refresh()
 
     async def async_set_water_level(self, water_level: int, **kwargs: Any) -> None:
-        """Set water level (1=low, 2=medium, 3=high)."""
+        """Set water level (1=moist, 2=wet)."""
         if self._is_k10 or self._is_k10_pro:
             return
         clean_mode = self.coordinator.data.get("clean_mode", {})
         if not isinstance(clean_mode, dict):
             clean_mode = {}
+        current_type = clean_mode.get("type", "sweep_mop")
+        if current_type == "sweep":
+            current_type = "sweep_mop"
+        updated = dict(clean_mode)
+        updated["water_level"] = water_level
+        updated["type"] = current_type
+        if "fan_level" not in updated:
+            updated["fan_level"] = 1
+        if "times" not in updated:
+            updated["times"] = 1
+        self._optimistic_clean_mode_update(updated)
         await self.coordinator.async_send_command(CMD_CHANGE_MODE, {
             "0": {
-                "fan_level": clean_mode.get("fan_level", 1),
-                "times": clean_mode.get("times", 1),
-                "type": clean_mode.get("type", "sweep_mop"),
+                "fan_level": updated.get("fan_level", 1),
+                "times": updated.get("times", 1),
+                "type": current_type,
                 "water_level": water_level,
             },
         })
         await self.coordinator.async_request_refresh()
+
+    async def async_cycle_clean_mode(self, **kwargs: Any) -> None:
+        """Cycle clean mode: sweep_mop -> sweep -> mop -> sweep_mop."""
+        mode = self.coordinator.data.get("clean_mode", {})
+        current = mode.get("type", "sweep_mop") if isinstance(mode, dict) else "sweep_mop"
+        order = ["sweep_mop", "sweep", "mop"]
+        try:
+            next_mode = order[(order.index(current) + 1) % len(order)]
+        except ValueError:
+            next_mode = "sweep_mop"
+        await self.async_set_clean_mode(next_mode)
+
+    async def async_cycle_water_level(self, **kwargs: Any) -> None:
+        """Cycle water level: 1 (moist) -> 2 (wet) -> 1."""
+        mode = self.coordinator.data.get("clean_mode", {})
+        current = mode.get("water_level", 1) if isinstance(mode, dict) else 1
+        next_level = 1 if current == 2 else 2
+        await self.async_set_water_level(next_level)
 
     async def async_send_command(
         self, command: str, params: dict[str, Any] | list[Any] | None = None, **kwargs: Any

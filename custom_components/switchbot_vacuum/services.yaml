@@ -89,7 +89,7 @@ set_clean_mode:
 
 set_water_level:
   name: "Set Water Level"
-  description: "Set mopping water output level (1=low, 2=medium, 3=high)"
+  description: "Set mopping water output level (1=moist, 2=wet)"
   target:
     entity:
       domain: vacuum
@@ -97,11 +97,28 @@ set_water_level:
   fields:
     water_level:
       name: "Water Level"
-      description: "Water output (1=low, 2=medium, 3=high)"
+      description: "Water output (1=moist, 2=wet)"
       required: true
       selector:
         number:
           min: 1
-          max: 3
+          max: 2
           step: 1
+
+cycle_clean_mode:
+  name: "Cycle Clean Mode"
+  description: "Cycle through cleaning modes: sweep_mop -> sweep -> mop -> sweep_mop"
+  target:
+    entity:
+      domain: vacuum
+      integration: switchbot_vacuum
+
+cycle_water_level:
+  name: "Cycle Water Level"
+  description: "Cycle through mopping water levels: 1 (moist) <-> 2 (wet)"
+  target:
+    entity:
+      domain: vacuum
+      integration: switchbot_vacuum
+
 
