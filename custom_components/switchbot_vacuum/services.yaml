@@ -64,3 +64,44 @@ force_refresh:
     entity:
       domain: vacuum
       integration: switchbot_vacuum
+
+set_clean_mode:
+  name: "Set Clean Mode"
+  description: "Set robot cleaning mode (sweep, mop, sweep_mop)"
+  target:
+    entity:
+      domain: vacuum
+      integration: switchbot_vacuum
+  fields:
+    mode:
+      name: "Clean Mode"
+      description: "Cleaning mode"
+      required: true
+      selector:
+        select:
+          options:
+            - label: "Sweep only"
+              value: "sweep"
+            - label: "Mop only"
+              value: "mop"
+            - label: "Sweep & Mop"
+              value: "sweep_mop"
+
+set_water_level:
+  name: "Set Water Level"
+  description: "Set mopping water output level (1=low, 2=medium, 3=high)"
+  target:
+    entity:
+      domain: vacuum
+      integration: switchbot_vacuum
+  fields:
+    water_level:
+      name: "Water Level"
+      description: "Water output (1=low, 2=medium, 3=high)"
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 3
+          step: 1
+

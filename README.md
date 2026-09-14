@@ -164,6 +164,30 @@ data:
 | `times` | no | `1` | 1 or 2 passes |
 | `force_order` | no | `true` | Clean rooms in the specified order |
 
+### `switchbot_vacuum.set_clean_mode`
+
+Set the robot's cleaning mode (`sweep`, `mop`, `sweep_mop`) without changing other settings.
+
+```yaml
+service: switchbot_vacuum.set_clean_mode
+target:
+  entity_id: vacuum.switchbot_vacuum
+data:
+  mode: "mop" # sweep, mop, sweep_mop
+```
+
+### `switchbot_vacuum.set_water_level`
+
+Set the mopping water output level (1–3) without changing other settings.
+
+```yaml
+service: switchbot_vacuum.set_water_level
+target:
+  entity_id: vacuum.switchbot_vacuum
+data:
+  water_level: 2 # 1 (low), 2 (medium), 3 (high)
+```
+
 ### `switchbot_vacuum.force_refresh`
 
 Force an immediate refresh of device status and room data (re-downloads the map from S3).

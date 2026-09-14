@@ -103,13 +103,13 @@ async def async_setup_entry(
         "clean_rooms",
         {
             vol.Required("rooms"): [str],
-            vol.Optional("mode", default="sweep_mop"): vol.In(
+            vol.Optional("mode"): vol.In(
                 ["sweep", "mop", "sweep_mop"]
             ),
-            vol.Optional("fan_level", default=1): vol.All(
+            vol.Optional("fan_level"): vol.All(
                 vol.Coerce(int), vol.Range(min=1, max=4)
             ),
-            vol.Optional("water_level", default=1): vol.All(
+            vol.Optional("water_level"): vol.All(
                 vol.Coerce(int), vol.Range(min=1, max=3)
             ),
             vol.Optional("times", default=1): vol.All(
@@ -118,6 +118,26 @@ async def async_setup_entry(
             vol.Optional("force_order", default=True): bool,
         },
         "async_clean_rooms",
+    )
+
+    platform.async_register_entity_service(
+        "set_clean_mode",
+        {
+            vol.Required("mode"): vol.In(
+                ["sweep", "mop", "sweep_mop"]
+            ),
+        },
+        "async_set_clean_mode",
+    )
+
+    platform.async_register_entity_service(
+        "set_water_level",
+        {
+            vol.Required("water_level"): vol.All(
+                vol.Coerce(int), vol.Range(min=1, max=3)
+            ),
+        },
+        "async_set_water_level",
     )
 
     platform.async_register_entity_service(
@@ -278,6 +298,40 @@ class SwitchBotS10Vacuum(CoordinatorEntity[SwitchBotS10Coordinator], StateVacuum
             })
         await self.coordinator.async_request_refresh()
 
+    async def async_set_clean_mode(self, mode: str, **kwargs: Any) -> None:
+        """Set clean mode (sweep, mop, sweep_mop)."""
+        if self._is_k10 or self._is_k10_pro:
+            return
+        clean_mode = self.coordinator.data.get("clean_mode", {})
+        if not isinstance(clean_mode, dict):
+            clean_mode = {}
+        await self.coordinator.async_send_command(CMD_CHANGE_MODE, {
+            "0": {
+                "fan_level": clean_mode.get("fan_level", 1),
+                "times": clean_mode.get("times", 1),
+                "type": mode,
+                "water_level": clean_mode.get("water_level", 1),
+            },
+        })
+        await self.coordinator.async_request_refresh()
+
+    async def async_set_water_level(self, water_level: int, **kwargs: Any) -> None:
+        """Set water level (1=low, 2=medium, 3=high)."""
+        if self._is_k10 or self._is_k10_pro:
+            return
+        clean_mode = self.coordinator.data.get("clean_mode", {})
+        if not isinstance(clean_mode, dict):
+            clean_mode = {}
+        await self.coordinator.async_send_command(CMD_CHANGE_MODE, {
+            "0": {
+                "fan_level": clean_mode.get("fan_level", 1),
+                "times": clean_mode.get("times", 1),
+                "type": clean_mode.get("type", "sweep_mop"),
+                "water_level": water_level,
+            },
+        })
+        await self.coordinator.async_request_refresh()
+
     async def async_send_command(
         self, command: str, params: dict[str, Any] | list[Any] | None = None, **kwargs: Any
     ) -> None:
@@ -290,13 +344,24 @@ class SwitchBotS10Vacuum(CoordinatorEntity[SwitchBotS10Coordinator], StateVacuum
     async def async_clean_rooms(
         self,
         rooms: list[str],
-        mode: str = "sweep_mop",
-        fan_level: int = 1,
-        water_level: int = 1,
+        mode: str | None = None,
+        fan_level: int | None = None,
+        water_level: int | None = None,
         times: int = 1,
         force_order: bool = True,
     ) -> None:
         """Clean specific rooms. Accepts room IDs or names."""
+        clean_mode = self.coordinator.data.get("clean_mode", {})
+        if not isinstance(clean_mode, dict):
+            clean_mode = {}
+
+        if mode is None:
+            mode = clean_mode.get("type", "sweep_mop")
+        if fan_level is None:
+            fan_level = clean_mode.get("fan_level", 1)
+        if water_level is None:
+            water_level = clean_mode.get("water_level", 1)
+
         room_map = self.coordinator.data.get("rooms", {})
         name_to_id = {v: k for k, v in room_map.items()}
 
